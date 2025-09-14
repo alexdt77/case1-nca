@@ -16,7 +16,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: infra/envs/dev  # géén shell hier!
+        working-directory: infra/envs/dev   # géén shell hier!
 
     steps:
       - name: Checkout
@@ -31,24 +31,29 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # >>> Debug: verifieer dat terraform bereikbaar is in deze shell
+      - name: Terraform version
+        shell: powershell
+        run: terraform -version
+
       - name: Terraform fmt
-        shell: cmd
+        shell: powershell
         run: terraform fmt -check
 
       - name: Terraform init
-        shell: cmd
+        shell: powershell
         run: terraform init -upgrade
 
       - name: Terraform validate
-        shell: cmd
+        shell: powershell
         run: terraform validate -no-color
 
       - name: Terraform plan (PR)
         if: github.event_name == 'pull_request'
-        shell: cmd
+        shell: powershell
         run: terraform plan -out=tfplan
 
       - name: Terraform apply (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        shell: cmd
+        shell: powershell
         run: terraform apply -auto-approve
