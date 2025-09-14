@@ -1,6 +1,8 @@
 name: Terraform
+
 on:
-  pull_request: { paths: ["infra/**"] }
+  pull_request:
+    paths: ["infra/**"]
   push:
     branches: ["main"]
     paths: ["infra/**"]
@@ -8,11 +10,18 @@ on:
 jobs:
   tf:
     runs-on: self-hosted
-    permissions: { id-token: write, contents: read }
-    defaults: { run: { working-directory: infra/envs/dev } }
+    permissions:
+      id-token: write
+      contents: read
+    # Windows runner => gebruik PowerShell (pwsh) als default shell
+    defaults:
+      run:
+        working-directory: infra/envs/dev
+        shell: pwsh
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -20,10 +29,17 @@ jobs:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
           aws-region: eu-central-1
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform fmt/validate
-        run: terraform fmt -check && terraform init && terraform validate
+      - name: Terraform fmt
+        run: terraform fmt -check
+
+      - name: Terraform init
+        run: terraform init -upgrade
+
+      - name: Terraform validate
+        run: terraform validate -no-color
 
       - name: Terraform plan (PR)
         if: github.event_name == 'pull_request'
