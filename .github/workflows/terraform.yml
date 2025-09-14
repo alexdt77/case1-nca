@@ -16,7 +16,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: infra/envs/dev   # alleen de map
+        working-directory: infra/envs/dev  # voer alle TF-commando's hier uit
 
     steps:
       - name: Checkout
@@ -28,30 +28,10 @@ jobs:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
           aws-region: eu-central-1
 
-      # Probeer eerst de officiële setup (als het werkt is dit het mooist)
-      - name: Setup Terraform (toolcache)
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      # Fallback: als 'terraform' nog steeds niet gevonden wordt, download zelf
-      - name: Ensure Terraform on PATH (fallback)
+      # Terraform staat nu lokaal geïnstalleerd (choco), dus direct gebruiken
+      - name: Terraform version
         shell: powershell
-        run: |
-          if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
-            $version = "1.7.5"
-            $tfRoot  = "$env:RUNNER_TEMP\terraform"
-            New-Item -ItemType Directory -Force -Path $tfRoot | Out-Null
-            $zip = "$tfRoot\terraform.zip"
-            $url = "https://releases.hashicorp.com/terraform/$version/terraform_${version}_windows_amd64.zip"
-            Write-Host "Downloading Terraform $version from $url"
-            Invoke-WebRequest -Uri $url -OutFile $zip
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $tfRoot, $true)
-            # Pad met terraform.exe toevoegen aan PATH voor volgende steps
-            "$tfRoot" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          }
-          terraform -version
+        run: terraform -version
 
       - name: Terraform fmt
         shell: powershell
@@ -59,18 +39,26 @@ jobs:
 
       - name: Terraform init
         shell: powershell
+        env:
+          TF_IN_AUTOMATION: "1"
         run: terraform init -upgrade
 
       - name: Terraform validate
         shell: powershell
+        env:
+          TF_IN_AUTOMATION: "1"
         run: terraform validate -no-color
 
       - name: Terraform plan (PR)
         if: github.event_name == 'pull_request'
         shell: powershell
+        env:
+          TF_IN_AUTOMATION: "1"
         run: terraform plan -out=tfplan
 
       - name: Terraform apply (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         shell: powershell
+        env:
+          TF_IN_AUTOMATION: "1"
         run: terraform apply -auto-approve
