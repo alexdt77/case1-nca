@@ -16,11 +16,19 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: infra/envs/dev  # voer alle TF-commando's hier uit
+        working-directory: infra/envs/dev  # hier staan je .tf files
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Show working dir (debug)
+        shell: powershell
+        run: |
+          Write-Host "PWD:" (Get-Location).Path
+          Get-ChildItem -Force
+          Write-Host "`nTerraform files found:"
+          Get-ChildItem -Recurse -Filter *.tf | Select-Object FullName
 
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -28,7 +36,6 @@ jobs:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
           aws-region: eu-central-1
 
-      # Terraform staat nu lokaal geïnstalleerd (choco), dus direct gebruiken
       - name: Terraform version
         shell: powershell
         run: terraform -version
@@ -41,7 +48,7 @@ jobs:
         shell: powershell
         env:
           TF_IN_AUTOMATION: "1"
-        run: terraform init -upgrade
+        run: terraform init -input=false -upgrade
 
       - name: Terraform validate
         shell: powershell
@@ -54,11 +61,11 @@ jobs:
         shell: powershell
         env:
           TF_IN_AUTOMATION: "1"
-        run: terraform plan -out=tfplan
+        run: terraform plan -no-color
 
       - name: Terraform apply (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         shell: powershell
         env:
           TF_IN_AUTOMATION: "1"
-        run: terraform apply -auto-approve
+        run: terraform apply -input=false -auto-approve
