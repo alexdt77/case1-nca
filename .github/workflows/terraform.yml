@@ -13,7 +13,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    # Windows runner => gebruik PowerShell (pwsh) als default shell
     defaults:
       run:
         working-directory: infra/envs/dev
