@@ -16,8 +16,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: infra/envs/dev
-        shell: powershell  # <— dwing Windows PowerShell 5.1 af
+        working-directory: infra/envs/dev  # géén shell hier!
 
     steps:
       - name: Checkout
@@ -33,23 +32,23 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform fmt
-        shell: powershell
+        shell: cmd
         run: terraform fmt -check
 
       - name: Terraform init
-        shell: powershell
+        shell: cmd
         run: terraform init -upgrade
 
       - name: Terraform validate
-        shell: powershell
+        shell: cmd
         run: terraform validate -no-color
 
       - name: Terraform plan (PR)
         if: github.event_name == 'pull_request'
-        shell: powershell
+        shell: cmd
         run: terraform plan -out=tfplan
 
       - name: Terraform apply (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        shell: powershell
+        shell: cmd
         run: terraform apply -auto-approve
