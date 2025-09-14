@@ -33,9 +33,9 @@ jobs:
         shell: powershell
         run: terraform -version
 
-      - name: Terraform fmt
+      - name: Terraform fmt (write)
         shell: powershell
-        run: terraform fmt -check
+        run: terraform fmt -recursive
 
       - name: Terraform init
         shell: powershell
