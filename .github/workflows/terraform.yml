@@ -1,0 +1,34 @@
+name: Terraform
+on:
+  pull_request: { paths: ["infra/**"] }
+  push:
+    branches: ["main"]
+    paths: ["infra/**"]
+
+jobs:
+  tf:
+    runs-on: self-hosted
+    permissions: { id-token: write, contents: read }
+    defaults: { run: { working-directory: infra/envs/dev } }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
+          aws-region: eu-central-1
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt/validate
+        run: terraform fmt -check && terraform init && terraform validate
+
+      - name: Terraform plan (PR)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply (main)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve
