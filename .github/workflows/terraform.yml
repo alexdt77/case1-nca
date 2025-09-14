@@ -17,7 +17,7 @@ jobs:
     defaults:
       run:
         working-directory: infra/envs/dev
-        shell: powershell   # <— i.p.v. pwsh
+        shell: cmd
 
     steps:
       - name: Checkout
