@@ -1,3 +1,4 @@
+# trigger pipeline
 resource "random_id" "suffix" { byte_length = 3 }
 
 resource "aws_s3_bucket" "tf_test" {
