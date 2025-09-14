@@ -16,7 +16,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: infra/envs/dev   # géén shell hier!
+        working-directory: infra/envs/dev   # alleen de map
 
     steps:
       - name: Checkout
@@ -28,13 +28,30 @@ jobs:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
           aws-region: eu-central-1
 
-      - name: Setup Terraform
+      # Probeer eerst de officiële setup (als het werkt is dit het mooist)
+      - name: Setup Terraform (toolcache)
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
-      # >>> Debug: verifieer dat terraform bereikbaar is in deze shell
-      - name: Terraform version
+      # Fallback: als 'terraform' nog steeds niet gevonden wordt, download zelf
+      - name: Ensure Terraform on PATH (fallback)
         shell: powershell
-        run: terraform -version
+        run: |
+          if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
+            $version = "1.7.5"
+            $tfRoot  = "$env:RUNNER_TEMP\terraform"
+            New-Item -ItemType Directory -Force -Path $tfRoot | Out-Null
+            $zip = "$tfRoot\terraform.zip"
+            $url = "https://releases.hashicorp.com/terraform/$version/terraform_${version}_windows_amd64.zip"
+            Write-Host "Downloading Terraform $version from $url"
+            Invoke-WebRequest -Uri $url -OutFile $zip
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $tfRoot, $true)
+            # Pad met terraform.exe toevoegen aan PATH voor volgende steps
+            "$tfRoot" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+          terraform -version
 
       - name: Terraform fmt
         shell: powershell
