@@ -1,0 +1,59 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths: [ "infra/**" ]
+  pull_request:
+    paths: [ "infra/**" ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  tf:
+    runs-on: self-hosted   # laat zo als jouw runner alleen 'self-hosted' label heeft
+
+    defaults:
+      run:
+        shell: powershell
+        working-directory: infra/envs/dev
+
+    concurrency:
+      group: terraform-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout (clean)
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 0
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
+          aws-region: eu-central-1
+
+      # Gebruik lokale Terraform of laat deze stap Terraform klaarzetten (werkt op self-hosted ook prima)
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -input=false -upgrade
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan (PR)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: Terraform Apply (push main)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -input=false -auto-approve
