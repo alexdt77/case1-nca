@@ -1,3 +1,4 @@
+project    = "cs1-ma-nca"
 env        = "dev"
 aws_region = "eu-central-1"
 cidr_hub   = "10.0.0.0/24"
