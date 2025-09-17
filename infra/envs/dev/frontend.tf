@@ -44,7 +44,7 @@ resource "aws_lb" "app" {
   name               = "case1nca-alb"
   load_balancer_type = "application"
   internal           = false
-  subnets            = [aws_subnet.app_public_a.id, aws_subnet.app_public_b.id] # 2 AZ's vereist
+  subnets            = [aws_subnet.app_public_a.id, aws_subnet.app_public_b.id]
   security_groups    = [aws_security_group.alb.id]
 }
 
@@ -108,8 +108,16 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([{
     name         = "app",
-    image        = "public.ecr.aws/nginx/nginx:latest",
+    image        = "${aws_ecr_repository.api.repository_url}:latest",
     portMappings = [{ containerPort = 80, protocol = "tcp" }],
+
+    environment = [
+      { name = "DB_HOST", value = "db.svc.internal" },
+      { name = "DB_USER", value = "appuser" },
+      { name = "DB_PASS", value = "ChangeMe_123!" },
+      { name = "DB_NAME", value = "appdb" } # als je app dat verwacht
+    ],
+
     logConfiguration = {
       logDriver = "awslogs",
       options = {
