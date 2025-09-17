@@ -1,10 +1,10 @@
 name: Terraform
 
 on:
-  workflow_dispatch:        
+  workflow_dispatch:
   push:
     branches: [ "main" ]
-    paths: [ "infra/**" ]   
+    paths: [ "infra/**" ]
   pull_request:
     paths: [ "infra/**" ]
 
@@ -14,16 +14,21 @@ permissions:
 
 jobs:
   tf:
-    runs-on: self-hosted        
+    runs-on: self-hosted
+
     defaults:
       run:
         shell: powershell
         working-directory: infra/envs/dev
 
+    concurrency:
+      group: terraform-${{ github.ref }}
+      cancel-in-progress: true
+
     env:
-      AWS_REGION: eu-central-1
       TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
       TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+      TF_VAR_aws_region: eu-central-1
 
     steps:
       - name: Checkout (clean)
@@ -36,7 +41,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: eu-central-1
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -49,9 +54,10 @@ jobs:
       - name: Terraform Validate
         run: terraform validate -no-color
 
-      - name: Terraform Plan
-        run: terraform plan -input=false -no-color -var-file="dev.tfvars" -out="tfplan"
+      - name: Terraform Plan (PR)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -input=false -no-color -out=tfplan
 
-      - name: Terraform Apply (alleen op push main)
+      - name: Terraform Apply (push main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -input=false -auto-approve "tfplan"
+        run: terraform apply -input=false -auto-approve
