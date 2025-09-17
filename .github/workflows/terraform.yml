@@ -14,7 +14,14 @@ permissions:
 
 jobs:
   tf:
-    runs-on: self-hosted   # laat zo als jouw runner alleen 'self-hosted' label heeft
+    runs-on: self-hosted
+
+    env:
+      AWS_REGION: eu-central-1
+      TF_INPUT: "false"
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
+      TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
 
     defaults:
       run:
@@ -36,23 +43,25 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
-          aws-region: eu-central-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # Gebruik lokale Terraform of laat deze stap Terraform klaarzetten (werkt op self-hosted ook prima)
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Init
-        run: terraform init -input=false -upgrade
+      - name: Terraform version
+        run: terraform version
+
+      - name: Terraform Init (S3/Dynamo backend)
+        run: terraform init -reconfigure -backend-config="backend.hcl"
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan (PR)
         if: github.event_name == 'pull_request'
-        run: terraform plan -input=false -no-color -out=tfplan
+        run: terraform plan -input=false -no-color
 
       - name: Terraform Apply (push main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
