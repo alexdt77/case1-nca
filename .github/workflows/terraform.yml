@@ -14,12 +14,12 @@ permissions:
 
 jobs:
   tf:
-    runs-on: self-hosted   # laat zo als jouw runner alleen 'self-hosted' label heeft
+    runs-on: self-hosted
 
     defaults:
       run:
         shell: powershell
-        working-directory: infra/envs/dev
+        working-directory: infra/envs/dev   # draait alles in /infra/envs/dev
 
     concurrency:
       group: terraform-${{ github.ref }}
@@ -38,22 +38,28 @@ jobs:
           role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
           aws-region: eu-central-1
 
-      # Gebruik lokale Terraform of laat deze stap Terraform klaarzetten (werkt op self-hosted ook prima)
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Init
-        run: terraform init -input=false -upgrade
+      - name: Terraform Init (S3 backend)
+        run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan (PR)
         if: github.event_name == 'pull_request'
-        run: terraform plan -input=false -no-color -out=tfplan
+        run: |
+          terraform plan -input=false -no-color `
+            -var "db_master_username=${{ secrets.DB_MASTER_USERNAME }}" `
+            -var "db_master_password=${{ secrets.DB_MASTER_PASSWORD }}" `
+            -out=tfplan
 
       - name: Terraform Apply (push main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -input=false -auto-approve
+        run: |
+          terraform apply -input=false -auto-approve `
+            -var "db_master_username=${{ secrets.DB_MASTER_USERNAME }}" `
+            -var "db_master_password=${{ secrets.DB_MASTER_PASSWORD }}"
