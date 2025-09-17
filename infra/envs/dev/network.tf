@@ -89,7 +89,7 @@ resource "aws_subnet" "app_private_a" {
   availability_zone = "${var.aws_region}a"
 }
 
-# >>> TOEGEVOEGD: tweede AZ voor ALB/ECS
+#tweede AZ voor ALB/ECS
 resource "aws_subnet" "app_public_b" {
   vpc_id                  = aws_vpc.app.id
   cidr_block              = cidrsubnet(var.cidr_app, 4, 2)
@@ -132,7 +132,7 @@ resource "aws_route_table_association" "app_pri_assoc" {
   subnet_id      = aws_subnet.app_private_a.id
 }
 
-# >>> TOEGEVOEGD: route-table associations voor AZ b
+# 
 resource "aws_route_table_association" "app_pub_assoc_b" {
   route_table_id = aws_route_table.app_public.id
   subnet_id      = aws_subnet.app_public_b.id
@@ -142,13 +142,19 @@ resource "aws_route_table_association" "app_pri_assoc_b" {
   route_table_id = aws_route_table.app_private.id
   subnet_id      = aws_subnet.app_private_b.id
 }
-# <<<
+
 
 # Data VPC
 resource "aws_subnet" "data_private_a" {
   vpc_id            = aws_vpc.data.id
   cidr_block        = cidrsubnet(var.cidr_data, 4, 0)
   availability_zone = "${var.aws_region}a"
+}
+
+resource "aws_subnet" "data_private_b" {
+  vpc_id            = aws_vpc.data.id
+  cidr_block        = cidrsubnet(var.cidr_data, 4, 1)
+  availability_zone = "${var.aws_region}b"
 }
 
 resource "aws_route_table" "data_private" {
@@ -158,6 +164,11 @@ resource "aws_route_table" "data_private" {
 resource "aws_route_table_association" "data_pri_assoc" {
   route_table_id = aws_route_table.data_private.id
   subnet_id      = aws_subnet.data_private_a.id
+}
+
+resource "aws_route_table_association" "data_pri_assoc_b" {
+  route_table_id = aws_route_table.data_private.id
+  subnet_id      = aws_subnet.data_private_b.id
 }
 
 # Transit Gateway
