@@ -1,10 +1,10 @@
 name: Terraform
 
 on:
-  workflow_dispatch:        # handmatig starten = makkelijk testen
+  workflow_dispatch:        
   push:
     branches: [ "main" ]
-    paths: [ "infra/**" ]   # alleen draaien als er iets in infra/ wijzigt
+    paths: [ "infra/**" ]   
   pull_request:
     paths: [ "infra/**" ]
 
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   tf:
-    runs-on: self-hosted        # laat zo; jouw runner heet self-hosted
+    runs-on: self-hosted        
     defaults:
       run:
         shell: powershell
