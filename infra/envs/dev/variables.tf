@@ -1,9 +1,16 @@
 provider "aws" {
   region = var.aws_region
-  default_tags { tags = { Project = var.project, Env = var.env } }
+  default_tags {
+    tags = {
+      Project = var.project
+      Env     = var.env
+    }
+  }
 }
 
 terraform {
+  backend "s3" {}
+
   required_version = ">= 1.3.0"
 
   required_providers {
@@ -42,7 +49,7 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-# Single VPC – één CIDR voor public + private subnets
+# Single VPC
 variable "cidr_app" {
   description = "CIDR voor de App VPC"
   type        = string
