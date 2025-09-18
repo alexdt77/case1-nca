@@ -1,17 +1,16 @@
-# SECURITY GROUPS
-
+# Security Groups
 resource "aws_security_group" "alb" {
   name   = "alb-sg"
   vpc_id = aws_vpc.app.id
 
-  ingress { # internet -> ALB (HTTP)
+  ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # publiek HTTP
   }
 
-  egress { # ALB -> uitgaand (health checks etc.)
+  egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -23,14 +22,14 @@ resource "aws_security_group" "app" {
   name   = "app-sg"
   vpc_id = aws_vpc.app.id
 
-  ingress { # alleen ALB -> app (HTTP)
+  ingress {
     from_port       = 80
     to_port         = 80
     protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+    security_groups = [aws_security_group.alb.id] # alleen verkeer vanaf ALB
   }
 
-  egress { # app -> uitgaand
+  egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -38,13 +37,12 @@ resource "aws_security_group" "app" {
   }
 }
 
-# LOAD BALANCER + TG + LISTENER
-
+# Load Balancer
 resource "aws_lb" "app" {
   name               = "case1nca-alb"
   load_balancer_type = "application"
   internal           = false
-  subnets            = [aws_subnet.app_public_a.id, aws_subnet.app_public_b.id]
+  subnets            = [aws_subnet.app_public.id] # public subnet
   security_groups    = [aws_security_group.alb.id]
 }
 
@@ -55,7 +53,10 @@ resource "aws_lb_target_group" "app" {
   target_type = "ip"
   vpc_id      = aws_vpc.app.id
 
-  health_check { path = "/" }
+  health_check {
+    path    = "/"
+    matcher = "200-399"
+  }
 }
 
 resource "aws_lb_listener" "http" {
@@ -69,13 +70,13 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-
-# ECS: CLUSTER + ROLE + LOGS + TASK + SERVICE
-
+# ECS Cluster
 resource "aws_ecs_cluster" "this" {
   name = "case1-nca"
 }
 
+# IAM Roles
+# Execution role (pull images, push logs)
 resource "aws_iam_role" "task_execution" {
   name = "ecsTaskExecutionRole-case1nca"
   assume_role_policy = jsonencode({
@@ -93,11 +94,31 @@ resource "aws_iam_role_policy_attachment" "task_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Task role (alleen secrets lezen)
+resource "aws_iam_role" "task" {
+  name = "ecsTaskRole-case1nca"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "ecs-tasks.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "task_secrets" {
+  role       = aws_iam_role.task.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadOnly"
+}
+
+# CloudWatch Logs
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
   retention_in_days = 7
 }
 
+# ECS Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "app"
   network_mode             = "awsvpc"
@@ -105,6 +126,7 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.task_execution.arn
+  task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
     name         = "app",
@@ -114,8 +136,11 @@ resource "aws_ecs_task_definition" "app" {
     environment = [
       { name = "DB_HOST", value = "db.svc.internal" },
       { name = "DB_USER", value = "appuser" },
-      { name = "DB_PASS", value = "ChangeMe_123!" },
-      { name = "DB_NAME", value = "appdb" } # als je app dat verwacht
+      { name = "DB_NAME", value = "appdb" }
+    ],
+
+    secrets = [
+      { name = "DB_PASS", valueFrom = aws_secretsmanager_secret.db_pass.arn }
     ],
 
     logConfiguration = {
@@ -129,15 +154,16 @@ resource "aws_ecs_task_definition" "app" {
   }])
 }
 
+# ECS Service
 resource "aws_ecs_service" "app" {
   name            = "app"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 2
+  desired_count   = 1 
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [aws_subnet.app_private_a.id, aws_subnet.app_private_b.id] # beide AZ's
+    subnets          = [aws_subnet.app_private.id] 
     assign_public_ip = false
     security_groups  = [aws_security_group.app.id]
   }

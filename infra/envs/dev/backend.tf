@@ -1,18 +1,14 @@
-#DB Security group
+# DB Security Group
 resource "aws_security_group" "db" {
   name   = "db-sg"
-  vpc_id = aws_vpc.data.id
+  vpc_id = aws_vpc.app.id
 
-
-  #postgresql
+  # Alleen verkeer vanaf ECS app
   ingress {
-    from_port = 5432
-    to_port   = 5432
-    protocol  = "tcp"
-    cidr_blocks = [
-      aws_subnet.app_private_a.cidr_block,
-      aws_subnet.app_private_b.cidr_block
-    ]
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
   }
 
   egress {
@@ -23,34 +19,39 @@ resource "aws_security_group" "db" {
   }
 }
 
-#DB Subnet group
-resource "aws_db_subnet_group" "data" {
-  name       = "data-subnets"
-  subnet_ids = [aws_subnet.data_private_a.id, aws_subnet.data_private_b.id]
+# DB Subnet Group
+resource "aws_db_subnet_group" "app" {
+  name       = "app-db-subnets"
+  subnet_ids = [aws_subnet.app_private.id] # sandbox → 1 private subnet genoeg
+
+  tags = {
+    Name = "app-db-subnet-group"
+  }
 }
 
-# --- RDS PostgreSQL (single instance, private) ---
+# RDS PostgreSQL
 resource "aws_db_instance" "db" {
   identifier        = "case1nca-postgres"
-  engine            = var.db_engine # "postgres"
-  engine_version    = "15"
-  instance_class    = "db.t3.micro"
+  engine            = "postgres"
+  engine_version    = "15.3"
+  instance_class    = "db.t3.micro" # toegestaan in sandbox
   allocated_storage = 20
   storage_type      = "gp2"
 
   username = var.db_master_username
   password = var.db_master_password
 
-  db_subnet_group_name   = aws_db_subnet_group.data.name
+  db_subnet_group_name   = aws_db_subnet_group.app.name
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false
   multi_az               = false
-  skip_final_snapshot    = true
-  deletion_protection    = false
   apply_immediately      = true
+
+  skip_final_snapshot = true
+  deletion_protection = false
 }
 
-# Private DNS record naar de RDS endpoint (db_instance = gebruik .address)
+# Private DNS record naar RDS
 resource "aws_route53_record" "db" {
   zone_id = aws_route53_zone.svc.zone_id
   name    = "db.svc.internal"
@@ -60,5 +61,10 @@ resource "aws_route53_record" "db" {
 }
 
 # Outputs
-output "db_endpoint" { value = aws_db_instance.db.address }
-output "db_sg_id" { value = aws_security_group.db.id }
+output "db_endpoint" {
+  value = aws_db_instance.db.address
+}
+
+output "db_sg_id" {
+  value = aws_security_group.db.id
+}
