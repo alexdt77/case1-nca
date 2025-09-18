@@ -98,7 +98,7 @@ jobs:
 
   plan-pr:
     name: Plan (PR)
-    runs-on: [self-hosted, mac]
+    runs-on: [self-hosted, macOS]
     if: github.event_name == 'pull_request'
     defaults:
       run:
