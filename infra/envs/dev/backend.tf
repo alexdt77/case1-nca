@@ -28,7 +28,6 @@ resource "aws_db_subnet_group" "app" {
 resource "aws_db_instance" "db" {
   identifier        = "case1nca-postgres"
   engine            = "postgres"
-  engine_version    = "15.3"
   instance_class    = "db.t3.micro"
   allocated_storage = 20
   storage_type      = "gp2"
