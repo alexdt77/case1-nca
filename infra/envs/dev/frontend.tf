@@ -37,7 +37,7 @@ resource "aws_security_group" "app" {
   }
 }
 
-# ALB 
+# ALB
 resource "aws_lb" "app" {
   name               = "case1nca-alb"
   load_balancer_type = "application"
@@ -70,7 +70,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-#ECS 
+# ECS
 resource "aws_ecs_cluster" "this" {
   name = "case1-nca"
 }
@@ -83,6 +83,7 @@ resource "aws_iam_role" "task_execution" {
     Statement = [{ Effect="Allow", Principal={ Service="ecs-tasks.amazonaws.com" }, Action="sts:AssumeRole" }]
   })
 }
+
 resource "aws_iam_role_policy_attachment" "exec_attach" {
   role       = aws_iam_role.task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
@@ -95,22 +96,35 @@ resource "aws_iam_role" "task" {
     Statement = [{ Effect="Allow", Principal={ Service="ecs-tasks.amazonaws.com" }, Action="sts:AssumeRole" }]
   })
 }
-data "aws_iam_policy" "secrets_ro" {
-  arn = "arn:aws:iam::aws:policy/SecretsManagerReadOnly"
+
+# Minimal inline policy: task may read only your secret
+resource "aws_iam_policy" "secret_ro_inline" {
+  name   = "ecsTaskSecretRead-${var.project}"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect   = "Allow",
+      Action   = [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      Resource = aws_secretsmanager_secret.db_pass.arn
+    }]
+  })
 }
 
-
-resource "aws_iam_role_policy_attachment" "task_secrets_ro" {
+resource "aws_iam_role_policy_attachment" "task_secret_inline_attach" {
   role       = aws_iam_role.task.name
-  policy_arn = data.aws_iam_policy.secrets_ro.arn
+  policy_arn = aws_iam_policy.secret_ro_inline.arn
 }
 
-
+# Logs
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
   retention_in_days = 7
 }
 
+# Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "app"
   network_mode             = "awsvpc"
@@ -145,12 +159,14 @@ resource "aws_ecs_task_definition" "app" {
     }
   }])
 
+  # IMPORTANT: depend on the IAM policy attachments (inline policy)
   depends_on = [
     aws_iam_role_policy_attachment.exec_attach,
-    aws_iam_role_policy_attachment.task_secrets_ro
+    aws_iam_role_policy_attachment.task_secret_inline_attach
   ]
 }
 
+# Service
 resource "aws_ecs_service" "app" {
   name            = "app"
   cluster         = aws_ecs_cluster.this.id
@@ -170,5 +186,6 @@ resource "aws_ecs_service" "app" {
     container_port   = 80
   }
 
+  # Keep this: service waits for the ALB listener
   depends_on = [aws_lb_listener.http]
 }
