@@ -2,7 +2,7 @@ name: App
 on:
   push:
     paths: ['app/**', '.github/workflows/app.yml']
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -12,15 +12,20 @@ env:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, windows]   # of mac
+    runs-on: [self-hosted, macOS]  
     steps:
       - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+
+      - name: Configure AWS credentials (temporary creds)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Enable Buildx (for cross-platform amd64)
+        uses: docker/setup-buildx-action@v3
 
       - name: Get account id
         id: acct
@@ -31,11 +36,10 @@ jobs:
           aws ecr get-login-password --region $AWS_REGION |
           docker login --username AWS --password-stdin ${{ steps.acct.outputs.id }}.dkr.ecr.$AWS_REGION.amazonaws.com
 
-      - name: Build & Push image
+      - name: Build & Push image (linux/amd64)
         run: |
           IMAGE=${{ steps.acct.outputs.id }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_NAME:latest
-          docker build -t $IMAGE ./app
-          docker push $IMAGE
+          docker buildx build --platform linux/amd64 -t $IMAGE ./app --push
 
       - name: Force ECS redeploy
         run: |
