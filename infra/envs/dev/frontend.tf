@@ -95,10 +95,16 @@ resource "aws_iam_role" "task" {
     Statement = [{ Effect="Allow", Principal={ Service="ecs-tasks.amazonaws.com" }, Action="sts:AssumeRole" }]
   })
 }
+data "aws_iam_policy" "secrets_ro" {
+  arn = "arn:aws:iam::aws:policy/SecretsManagerReadOnly"
+}
+
+
 resource "aws_iam_role_policy_attachment" "task_secrets_ro" {
   role       = aws_iam_role.task.name
-  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadOnly"
+  policy_arn = data.aws_iam_policy.secrets_ro.arn
 }
+
 
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
@@ -138,6 +144,11 @@ resource "aws_ecs_task_definition" "app" {
       }
     }
   }])
+
+  depends_on = [
+    aws_iam_role_policy_attachment.exec_attach,
+    aws_iam_role_policy_attachment.task_secrets_ro
+  ]
 }
 
 resource "aws_ecs_service" "app" {
