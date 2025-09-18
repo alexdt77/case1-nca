@@ -1,43 +1,76 @@
+provider "aws" {
+  region = var.aws_region
+  default_tags { tags = { Project = var.project, Env = var.env } }
+}
+
+terraform {
+  required_version = ">= 1.3.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.50"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+  }
+}
+
 variable "project" {
-  type    = string
-  default = "cs1-ma-nca"
+  description = "Projectnaam voor tagging"
+  type        = string
+  default     = "cs1-ma-nca"
 }
 
 variable "env" {
-  type    = string
-  default = "dev"
+  description = "Omgeving (dev/test/prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "owner" {
+  description = "Owner/Student"
+  type        = string
+  default     = "student"
 }
 
 variable "aws_region" {
-  type    = string
-  default = "eu-central-1"
+  description = "AWS regio"
+  type        = string
+  default     = "eu-central-1"
 }
 
-variable "cidr_hub" {
-  type    = string
-  default = "10.0.0.0/24"
-}
-
+# Single VPC – één CIDR voor public + private subnets
 variable "cidr_app" {
-  type    = string
-  default = "10.0.1.0/24"
+  description = "CIDR voor de App VPC"
+  type        = string
+  default     = "10.0.0.0/16"
 }
 
-variable "cidr_data" {
-  type    = string
-  default = "10.0.2.0/24"
-}
-
+# RDS instellingen
 variable "db_engine" {
-  type    = string
-  default = "postgres"
+  description = "Databasetype"
+  type        = string
+  default     = "postgres"
 }
 
 variable "db_master_username" {
-  type = string
+  description = "DB admin gebruiker"
+  type        = string
+  default     = "appadmin"
 }
 
 variable "db_master_password" {
-  type      = string
-  sensitive = true
+  description = "DB admin wachtwoord (zet via TF_VAR_db_master_password of Secrets Manager)"
+  type        = string
+  sensitive   = true
+}
+
+# ECR
+variable "ecr_repo_name" {
+  description = "Naam van de ECR repository"
+  type        = string
+  default     = "case1nca-api"
 }

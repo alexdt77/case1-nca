@@ -1,0 +1,42 @@
+name: App
+on:
+  push:
+    paths: ['app/**', '.github/workflows/app.yml']
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPO_NAME: case1nca-api
+  CLUSTER_NAME: case1-nca
+  SERVICE_NAME: app
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows]   # of mac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Get account id
+        id: acct
+        run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region $AWS_REGION |
+          docker login --username AWS --password-stdin ${{ steps.acct.outputs.id }}.dkr.ecr.$AWS_REGION.amazonaws.com
+
+      - name: Build & Push image
+        run: |
+          IMAGE=${{ steps.acct.outputs.id }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_NAME:latest
+          docker build -t $IMAGE ./app
+          docker push $IMAGE
+
+      - name: Force ECS redeploy
+        run: |
+          aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment

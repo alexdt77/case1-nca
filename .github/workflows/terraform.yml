@@ -16,7 +16,6 @@ on:
     paths: [ "infra/**" ]
 
 permissions:
-  id-token: write   # for OIDC
   contents: read
 
 concurrency:
@@ -24,9 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TF_VAR_aws_region: eu-central-1
-  TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
-  TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
 
 jobs:
   apply-windows:
@@ -39,21 +36,29 @@ jobs:
         working-directory: infra/envs/dev
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (temporary creds)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          clean: true
-          fetch-depth: 0
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
-          aws-region: ${{ env.TF_VAR_aws_region }}
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
+
       - name: Terraform Init (backend.hcl)
         run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
+
       - name: Terraform Validate
         run: terraform validate -no-color
+
       - name: Terraform Apply
+        env:
+          TF_VAR_db_master_password:  ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
+          TF_VAR_db_master_username:  ${{ secrets.TF_VAR_DB_MASTER_USERNAME }} # zie noot hieronder
         run: terraform apply -input=false -auto-approve
 
   apply-mac:
@@ -66,25 +71,33 @@ jobs:
         working-directory: infra/envs/dev
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (temporary creds)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          clean: true
-          fetch-depth: 0
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
-          aws-region: ${{ env.TF_VAR_aws_region }}
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
+
       - name: Terraform Init (backend.hcl)
         run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
+
       - name: Terraform Validate
         run: terraform validate -no-color
+
       - name: Terraform Apply
+        env:
+          TF_VAR_db_master_password:  ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
+          TF_VAR_db_master_username:  ${{ secrets.TF_VAR_DB_MASTER_USERNAME }}
         run: terraform apply -input=false -auto-approve
 
-  plan-mac:
-    name: Plan (macOS self-hosted)
+  plan-pr:
+    name: Plan (PR)
     runs-on: [self-hosted, mac]
     if: github.event_name == 'pull_request'
     defaults:
@@ -93,16 +106,24 @@ jobs:
         working-directory: infra/envs/dev
     steps:
       - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+
+      - name: Configure AWS credentials (temporary creds)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::760981412376:role/GitHubActionsOIDC
-          aws-region: ${{ env.TF_VAR_aws_region }}
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
+
       - name: Terraform Init (backend.hcl)
         run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
+
       - name: Terraform Validate
         run: terraform validate -no-color
+
       - name: Terraform Plan
         run: terraform plan -input=false -no-color -out=tfplan
