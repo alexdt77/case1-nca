@@ -36,7 +36,6 @@ resource "aws_security_group" "app" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
-
 # ALB
 resource "aws_lb" "app" {
   name               = "case1nca-alb"
@@ -69,12 +68,10 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.app.arn
   }
 }
-
 # ECS
 resource "aws_ecs_cluster" "this" {
   name = "case1-nca"
 }
-
 # Roles (exec + task can read Secrets Manager)
 resource "aws_iam_role" "task_execution" {
   name = "ecsTaskExecutionRole-case1nca"
@@ -96,8 +93,7 @@ resource "aws_iam_role" "task" {
     Statement = [{ Effect="Allow", Principal={ Service="ecs-tasks.amazonaws.com" }, Action="sts:AssumeRole" }]
   })
 }
-
-# Minimal inline policy: task may read only your secret
+#task may read only your secret
 resource "aws_iam_policy" "secret_ro_inline" {
   name   = "ecsTaskSecretRead-${var.project}"
   policy = jsonencode({
@@ -117,13 +113,11 @@ resource "aws_iam_role_policy_attachment" "task_secret_inline_attach" {
   role       = aws_iam_role.task.name
   policy_arn = aws_iam_policy.secret_ro_inline.arn
 }
-
 # Logs
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
   retention_in_days = 7
 }
-
 # Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "app"
@@ -158,14 +152,12 @@ resource "aws_ecs_task_definition" "app" {
       }
     }
   }])
-
-  # IMPORTANT: depend on the IAM policy attachments (inline policy)
+  #depend on the IAM policy attachments (inline policy)
   depends_on = [
     aws_iam_role_policy_attachment.exec_attach,
     aws_iam_role_policy_attachment.task_secret_inline_attach
   ]
 }
-
 # Service
 resource "aws_ecs_service" "app" {
   name            = "app"
@@ -185,7 +177,29 @@ resource "aws_ecs_service" "app" {
     container_name   = "app"
     container_port   = 80
   }
-
-  # Keep this: service waits for the ALB listener
+  #service waits for the ALB listener
   depends_on = [aws_lb_listener.http]
+}
+#ECS Service Auto Scaling 
+resource "aws_appautoscaling_target" "ecs" {
+  max_capacity       = 4
+  min_capacity       = 2
+  resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.app.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "ecs_cpu" {
+  name               = "ecs-cpu-scale"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value = 50  # richt op ~50% CPU
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
 }
