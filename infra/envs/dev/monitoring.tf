@@ -1,6 +1,7 @@
-# AMP workspace
+# AMP workspace 
 resource "aws_prometheus_workspace" "main" {
-  alias = "nca-metrics"
+  provider = aws.notags
+  alias    = "nca-metrics"
 }
 
 output "amp_workspace_id"  { value = aws_prometheus_workspace.main.id }
