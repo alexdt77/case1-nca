@@ -25,6 +25,11 @@ terraform {
   }
 }
 
+provider "aws" {
+  alias  = "notags"
+  region = var.aws_region
+}
+
 variable "project" {
   description = "Projectnaam voor tagging"
   type        = string
@@ -81,3 +86,5 @@ variable "ecr_repo_name" {
   type        = string
   default     = "case1nca-api"
 }
+
+
