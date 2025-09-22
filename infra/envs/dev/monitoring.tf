@@ -1,6 +1,6 @@
 # AMP workspace 
 resource "aws_prometheus_workspace" "main" {
-  provider = aws.notags
+  provider = aws.notags   
   alias    = "nca-metrics"
 }
 
