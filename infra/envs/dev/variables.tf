@@ -90,12 +90,6 @@ variable "ecr_repo_name" {
 }
 
 # Monitoring input
-variable "vpc_id" {
-  type = string
-}
-variable "subnet_id" {
-  type = string
-}
-variable "my_ip_cidr" {
-  type = string
-}
+variable "vpc_id"    { type = string }
+variable "subnet_id" { type = string }
+variable "my_ip_cidr"{ type = string }
