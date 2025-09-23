@@ -30,6 +30,8 @@ provider "aws" {
   region = var.aws_region
 }
 
+# -------- Vars --------
+
 variable "project" {
   description = "Projectnaam voor tagging"
   type        = string
@@ -54,14 +56,14 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-#VPC
+# VPC
 variable "cidr_app" {
   description = "CIDR voor de App VPC"
   type        = string
   default     = "10.0.0.0/16"
 }
 
-# RDS instellingen
+# RDS
 variable "db_engine" {
   description = "Databasetype"
   type        = string
@@ -87,14 +89,13 @@ variable "ecr_repo_name" {
   default     = "case1nca-api"
 }
 
-variable "vpc_id"     { type = string }
-variable "subnet_id"  { type = string }
-variable "my_ip_cidr" { type = string }
-  
-variable "env" {
-  type    = string
-  default = "dev"
+# Monitoring input
+variable "vpc_id" {
+  type = string
 }
-
-
-
+variable "subnet_id" {
+  type = string
+}
+variable "my_ip_cidr" {
+  type = string
+}
