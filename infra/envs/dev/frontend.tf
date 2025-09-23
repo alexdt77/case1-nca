@@ -76,8 +76,8 @@ resource "aws_ecs_cluster" "this" {
 resource "aws_iam_role" "task_execution" {
   name = "ecsTaskExecutionRole-case1nca"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{ Effect="Allow", Principal={ Service="ecs-tasks.amazonaws.com" }, Action="sts:AssumeRole" }]
+    Version   = "2012-10-17",
+    Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
 
@@ -89,18 +89,18 @@ resource "aws_iam_role_policy_attachment" "exec_attach" {
 resource "aws_iam_role" "task" {
   name = "ecsTaskRole-case1nca"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{ Effect="Allow", Principal={ Service="ecs-tasks.amazonaws.com" }, Action="sts:AssumeRole" }]
+    Version   = "2012-10-17",
+    Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
 #task may read only your secret
 resource "aws_iam_policy" "secret_ro_inline" {
-  name   = "ecsTaskSecretRead-${var.project}"
+  name = "ecsTaskSecretRead-${var.project}"
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Effect   = "Allow",
-      Action   = [
+      Effect = "Allow",
+      Action = [
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
       ],
@@ -197,7 +197,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
   service_namespace  = aws_appautoscaling_target.ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
-    target_value = 50  # richt op ~50% CPU
+    target_value = 50 # richt op ~50% CPU
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }

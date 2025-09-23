@@ -54,7 +54,7 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-# Single VPC
+#VPC
 variable "cidr_app" {
   description = "CIDR voor de App VPC"
   type        = string
@@ -86,5 +86,15 @@ variable "ecr_repo_name" {
   type        = string
   default     = "case1nca-api"
 }
+
+variable "vpc_id"     { type = string }
+variable "subnet_id"  { type = string }
+variable "my_ip_cidr" { type = string }
+  
+variable "env" {
+  type    = string
+  default = "dev"
+}
+
 
 

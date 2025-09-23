@@ -11,11 +11,12 @@ on:
         options: [windows, mac]
   push:
     branches: [ "main" ]
-    paths: [ "infra/**" ]
+    paths: [ "infra/**", ".github/workflows/terraform.yml" ]
   pull_request:
-    paths: [ "infra/**" ]
+    paths: [ "infra/**", ".github/workflows/terraform.yml" ]
 
 permissions:
+  id-token: write # nodig voor OIDC
   contents: read
 
 concurrency:
@@ -37,33 +38,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (temporary creds)
+      #OIDC
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Init (backend.hcl)
-        run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
+      - name: Terraform Fmt
+        run: terraform fmt -recursive -check
+
+      - name: Terraform Init (S3 backend)
+        run: |
+          terraform init -reconfigure `
+            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" `
+            -backend-config="key=envs/${{ vars.ENV }}/terraform.tfstate" `
+            -backend-config="region=${{ secrets.AWS_REGION }}" `
+            -backend-config="dynamodb_table=${{ secrets.TF_BACKEND_DYNAMODB_TABLE }}"
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Apply
-        env:
-          TF_VAR_db_master_password:  ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
-          TF_VAR_db_master_username:  ${{ secrets.TF_VAR_DB_MASTER_USERNAME }} # zie noot hieronder
-        run: terraform apply -input=false -auto-approve
+        run: >
+          terraform apply -input=false -auto-approve
+          -var "vpc_id=${{ vars.VPC_ID }}"
+          -var "subnet_id=${{ vars.SUBNET_ID }}"
+          -var "my_ip_cidr=${{ vars.MY_IP_CIDR }}"
+          -var "env=${{ vars.ENV }}"
 
   apply-mac:
     name: Apply (macOS self-hosted)
-    runs-on: [self-hosted, mac]
+    runs-on: [self-hosted, mac]   
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'mac'
     defaults:
       run:
@@ -72,33 +82,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (temporary creds)
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Init (backend.hcl)
-        run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
+      - name: Terraform Fmt
+        run: terraform fmt -recursive -check
+
+      - name: Terraform Init (S3 backend)
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
+            -backend-config="key=envs/${{ vars.ENV }}/terraform.tfstate" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_BACKEND_DYNAMODB_TABLE }}"
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Apply
-        env:
-          TF_VAR_db_master_password:  ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
-          TF_VAR_db_master_username:  ${{ secrets.TF_VAR_DB_MASTER_USERNAME }}
-        run: terraform apply -input=false -auto-approve
+        run: >
+          terraform apply -input=false -auto-approve
+          -var "vpc_id=${{ vars.VPC_ID }}"
+          -var "subnet_id=${{ vars.SUBNET_ID }}"
+          -var "my_ip_cidr=${{ vars.MY_IP_CIDR }}"
+          -var "env=${{ vars.ENV }}"
 
   plan-pr:
     name: Plan (PR)
-    runs-on: [self-hosted, macOS]
+    runs-on: [self-hosted, mac]   
     if: github.event_name == 'pull_request'
     defaults:
       run:
@@ -107,23 +125,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (temporary creds)
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Init (backend.hcl)
-        run: terraform init -input=false -reconfigure -backend-config="backend.hcl"
+      - name: Terraform Fmt
+        run: terraform fmt -recursive -check
+
+      - name: Terraform Init (S3 backend)
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
+            -backend-config="key=envs/${{ vars.ENV }}/terraform.tfstate" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_BACKEND_DYNAMODB_TABLE }}"
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan
-        run: terraform plan -input=false -no-color -out=tfplan
+        run: >
+          terraform plan -input=false -no-color -out=tfplan
+          -var "vpc_id=${{ vars.VPC_ID }}"
+          -var "subnet_id=${{ vars.SUBNET_ID }}"
+          -var "my_ip_cidr=${{ vars.MY_IP_CIDR }}"
+          -var "env=${{ vars.ENV }}"
