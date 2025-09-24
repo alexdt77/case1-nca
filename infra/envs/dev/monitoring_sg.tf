@@ -1,6 +1,3 @@
-variable "vpc_id" {}
-variable "subnet_id" {}
-
 resource "aws_security_group" "monitoring" {
   name        = "sgmonitoring"
   description = "Toegang tot Grafana (3000) en Prometheus (9090)"
