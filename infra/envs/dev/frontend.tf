@@ -93,29 +93,19 @@ resource "aws_iam_role" "task" {
     Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
-#task may read only your secret
-resource "aws_iam_policy" "secret_ro_inline" {
+# Inline policy op de TASK role om Secrets Manager te lezen
+data "aws_iam_policy_document" "task_secret_ro" {
+  statement {
+    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.db_pass.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "task_secret_read" {
   name   = "ecsTaskSecretRead-${var.project}"
-  policy = jsonencode({
-    Version   = "2012-10-17",
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-        ]
-        Resource = data.aws_secretsmanager_secret.db_pass.arn
-      }
-    ]
-  })
+  role   = aws_iam_role.task.name       # <-- BELANGRIJK: task role, niet execution role
+  policy = data.aws_iam_policy_document.task_secret_ro.json
 }
-
-resource "aws_iam_role_policy_attachment" "task_secret_read" {
-  role       = aws_iam_role.task_execution.name   
-  policy_arn = aws_iam_policy.secret_ro_inline.arn
-}
-
 # Logs
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
@@ -155,11 +145,12 @@ resource "aws_ecs_task_definition" "app" {
       }
     }
   }])
-  #depend on the IAM policy attachments (inline policy)
- depends_on = [
-   aws_iam_role_policy_attachment.exec_attach,
-   aws_iam_role_policy_attachment.task_secret_read
- ]
+
+depends_on = [
+  aws_iam_role_policy_attachment.exec_attach, 
+  aws_iam_role_policy.task_secret_read        
+]
+
 
 }
 # Service
