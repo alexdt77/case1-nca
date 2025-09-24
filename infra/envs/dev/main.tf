@@ -2,7 +2,7 @@ output "region" { value = var.aws_region }
 
 
 data "aws_secretsmanager_secret" "db_pass" {
-  name = "caselnca/db-pass"
+  name = "case1nca/db-pass"
 }
 
 data "aws_secretsmanager_secret_version" "db_pass" {
