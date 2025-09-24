@@ -143,7 +143,7 @@ resource "aws_ecs_task_definition" "app" {
     ]
 
     secrets = [
-      { name = "DB_PASS", valueFrom = aws_secretsmanager_secret.db_pass.arn }
+      { name = "DB_PASS", valueFrom = data.aws_secretsmanager_secret_version.db_pass.arn }
     ]
 
     logConfiguration = {
@@ -156,10 +156,11 @@ resource "aws_ecs_task_definition" "app" {
     }
   }])
   #depend on the IAM policy attachments (inline policy)
-  depends_on = [
-    aws_iam_role_policy_attachment.exec_attach,
-    aws_iam_role_policy_attachment.task_secret_inline_attach
-  ]
+ depends_on = [
+   aws_iam_role_policy_attachment.exec_attach,
+   aws_iam_role_policy_attachment.task_secret_read
+ ]
+
 }
 # Service
 resource "aws_ecs_service" "app" {
