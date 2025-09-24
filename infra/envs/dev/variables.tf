@@ -99,3 +99,9 @@ variable "subnet_id" {
 variable "my_ip_cidr" {
   type = string
 }
+
+variable "db_password_secret_name" {
+  type    = string
+  default = "case1nca/db-pass"   
+}
+
