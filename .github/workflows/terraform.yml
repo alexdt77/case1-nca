@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Runner for APPLY"
+        description: "Runner"
         required: true
-        default: windows
+        default: mac
         type: choice
-        options: [windows, mac]
+        options: [mac]
   push:
     branches: [ "main" ]
     paths: [ "infra/**", ".github/workflows/terraform.yml" ]
@@ -16,7 +16,7 @@ on:
     paths: [ "infra/**", ".github/workflows/terraform.yml" ]
 
 permissions:
-  id-token: write # nodig voor OIDC
+  id-token: write   # nodig voor OIDC
   contents: read
 
 concurrency:
@@ -27,54 +27,10 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
 
 jobs:
-  apply-windows:
-    name: Apply (Windows self-hosted)
-    runs-on: [self-hosted, windows]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'windows'))
-    defaults:
-      run:
-        shell: powershell
-        working-directory: infra/envs/dev
-    steps:
-      - uses: actions/checkout@v4
-
-      #OIDC
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region:     ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform Fmt
-        run: terraform fmt -recursive -check
-
-      - name: Terraform Init (S3 backend)
-        run: |
-          terraform init -reconfigure `
-            -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" `
-            -backend-config="key=envs/${{ vars.ENV }}/terraform.tfstate" `
-            -backend-config="region=${{ secrets.AWS_REGION }}" `
-            -backend-config="dynamodb_table=${{ secrets.TF_BACKEND_DYNAMODB_TABLE }}"
-
-      - name: Terraform Validate
-        run: terraform validate -no-color
-
-      - name: Terraform Apply
-        run: >
-          terraform apply -input=false -auto-approve
-          -var "vpc_id=${{ vars.VPC_ID }}"
-          -var "subnet_id=${{ vars.SUBNET_ID }}"
-          -var "my_ip_cidr=${{ vars.MY_IP_CIDR }}"
-          -var "env=${{ vars.ENV }}"
-
   apply-mac:
     name: Apply (macOS self-hosted)
-    runs-on: [self-hosted, mac]   
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'mac'
+    runs-on: [self-hosted, mac]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     defaults:
       run:
         shell: bash
@@ -107,6 +63,9 @@ jobs:
         run: terraform validate -no-color
 
       - name: Terraform Apply
+        env:
+          TF_VAR_db_master_username: ${{ secrets.TF_VAR_DB_MASTER_USERNAME }}
+          TF_VAR_db_master_password: ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
         run: >
           terraform apply -input=false -auto-approve
           -var "vpc_id=${{ vars.VPC_ID }}"
@@ -116,7 +75,7 @@ jobs:
 
   plan-pr:
     name: Plan (PR)
-    runs-on: [self-hosted, mac]   
+    runs-on: [self-hosted, mac]
     if: github.event_name == 'pull_request'
     defaults:
       run:
@@ -150,6 +109,9 @@ jobs:
         run: terraform validate -no-color
 
       - name: Terraform Plan
+        env:
+          TF_VAR_db_master_username: ${{ secrets.TF_VAR_DB_MASTER_USERNAME }}
+          TF_VAR_db_master_password: ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
         run: >
           terraform plan -input=false -no-color -out=tfplan
           -var "vpc_id=${{ vars.VPC_ID }}"
