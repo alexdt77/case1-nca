@@ -4,31 +4,33 @@ on:
     paths: ['app/**', '.github/workflows/app.yml']
   workflow_dispatch: {}
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_REGION:    ${{ secrets.AWS_REGION }}
   ECR_REPO_NAME: case1nca-api
-  CLUSTER_NAME: case1-nca
-  SERVICE_NAME: app
+  CLUSTER_NAME:  case1-nca
+  SERVICE_NAME:  app
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest   # <— BELANGRIJK: niet self-hosted/macOS
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_APP }}
+          aws-region:     ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & push (linux/amd64)
+      - name: Build & push image
         uses: docker/build-push-action@v5
         with:
           context: ./app
@@ -39,6 +41,6 @@ jobs:
       - name: Force ECS redeploy
         run: |
           aws ecs update-service \
-            --cluster "$CLUSTER_NAME" \
-            --service "$SERVICE_NAME" \
+            --cluster "${{ env.CLUSTER_NAME }}" \
+            --service "${{ env.SERVICE_NAME }}" \
             --force-new-deployment
