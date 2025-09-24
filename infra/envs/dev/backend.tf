@@ -36,7 +36,7 @@ resource "aws_db_instance" "db" {
   allocated_storage = 20
   storage_type      = "gp2"
 
-  username = var.db_master_username
+  username = "appadmin"
   password = var.db_master_password
 
   db_subnet_group_name   = aws_db_subnet_group.app.name
