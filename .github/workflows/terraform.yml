@@ -64,8 +64,9 @@ jobs:
 
       - name: Terraform Apply
         env:
-          TF_VAR_db_master_username: ${{ secrets.TF_VAR_DB_MASTER_USERNAME }}
-          TF_VAR_db_master_password: ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
+          TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
+          TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+          TF_VAR_db_password_secret_name: ${{ secrets.TF_VAR_DB_PASSWORD_SECRET_NAME }}
         run: >
           terraform apply -input=false -auto-approve
           -var "vpc_id=${{ vars.VPC_ID }}"
@@ -110,8 +111,9 @@ jobs:
 
       - name: Terraform Plan
         env:
-          TF_VAR_db_master_username: ${{ secrets.TF_VAR_DB_MASTER_USERNAME }}
-          TF_VAR_db_master_password: ${{ secrets.TF_VAR_DB_MASTER_PASSWORD }}
+          TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
+          TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+          TF_VAR_db_password_secret_name: ${{ secrets.TF_VAR_DB_PASSWORD_SECRET_NAME }}
         run: >
           terraform plan -input=false -no-color -out=tfplan
           -var "vpc_id=${{ vars.VPC_ID }}"
