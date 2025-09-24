@@ -20,7 +20,7 @@ resource "aws_security_group" "db" {
 
 #DB Subnet group (2 private subnets, AZ a/b) 
 resource "aws_db_subnet_group" "app" {
-  name       = "app-db-subnets"
+  name       = "app-db-subnets-"
   subnet_ids = [aws_subnet.app_private_a.id, aws_subnet.app_private_b.id]
 }
 
