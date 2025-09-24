@@ -111,7 +111,6 @@ resource "aws_iam_policy" "secret_ro_inline" {
   })
 }
 
-
 resource "aws_iam_role_policy_attachment" "task_secret_read" {
   role       = aws_iam_role.task_execution.name   
   policy_arn = aws_iam_policy.secret_ro_inline.arn
