@@ -95,19 +95,22 @@ resource "aws_iam_role" "task" {
 }
 #task may read only your secret
 resource "aws_iam_policy" "secret_ro_inline" {
-  name = "ecsTaskSecretRead-${var.project}"
+  name   = "ecsTaskSecretRead-${var.project}"
   policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect = "Allow",
-      Action = [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret"
-      ],
-      Resource = data.aws_secretsmanager_secret.db_pass.arn
-    }]
+    Version   = "2012-10-17",
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+        ]
+        Resource = data.aws_secretsmanager_secret.db_pass.arn
+      }
+    ]
   })
 }
+
 
 resource "aws_iam_role_policy_attachment" "task_secret_read" {
   role       = aws_iam_role.task_execution.name   
