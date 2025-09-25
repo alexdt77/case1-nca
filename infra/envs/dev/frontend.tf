@@ -1,4 +1,4 @@
-# ========== SECURITY GROUPS ==========
+# Security Groups
 resource "aws_security_group" "alb" {
   name   = "alb-sg"
   vpc_id = aws_vpc.app.id
@@ -22,6 +22,7 @@ resource "aws_security_group" "app" {
   name   = "app-sg"
   vpc_id = aws_vpc.app.id
 
+  # Alleen verkeer vanaf de ALB naar de app-tasks
   ingress {
     from_port       = 80
     to_port         = 80
@@ -37,7 +38,7 @@ resource "aws_security_group" "app" {
   }
 }
 
-# ========== ALB ==========
+# Application Load Balancer
 resource "aws_lb" "app" {
   name               = "case1nca-alb"
   load_balancer_type = "application"
@@ -70,17 +71,23 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# ========== ECS ==========
+# ECS Cluster
 resource "aws_ecs_cluster" "this" {
   name = "case1-nca"
 }
 
-# ========== IAM ROLES ==========
+
+# IAM Roles & Policies
+# Execution role: trekt image uit ECR, schrijft logs, enz.
 resource "aws_iam_role" "task_execution" {
   name = "ecsTaskExecutionRole-case1nca"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17",
-    Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "ecs-tasks.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
   })
 }
 
@@ -89,21 +96,20 @@ resource "aws_iam_role_policy_attachment" "exec_attach" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Task role: app-container runtime permissies (o.a. Secrets Manager lezen)
 resource "aws_iam_role" "task" {
   name = "ecsTaskRole-case1nca"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17",
-    Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "ecs-tasks.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
   })
 }
 
-# ========== SECRETS (read) ==========
-# Lookup van je secret (naam komt uit var.db_password_secret_name, bv "case1nca/db-pass")
-data "aws_secretsmanager_secret" "db_pass" {
-  name = var.db_password_secret_name
-}
-
-# TASK role mag (runtime) secret lezen 
+# Inline policy op TASK role: alleen lezen van jouw DB-secret
 data "aws_iam_policy_document" "task_secret_ro" {
   statement {
     actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
@@ -117,40 +123,15 @@ resource "aws_iam_role_policy" "task_secret_read" {
   policy = data.aws_iam_policy_document.task_secret_ro.json
 }
 
-# *** NIEUW *** Execution role moet secret kunnen ophalen voor `container_definitions.secrets`
-data "aws_iam_policy_document" "exec_can_read_db_secret" {
-  statement {
-    sid     = "AllowReadDbPassSecret"
-    effect  = "Allow"
-    actions = [
-      "secretsmanager:GetSecretValue",
-      "secretsmanager:DescribeSecret"
-    ]
-    # het basis-ARN is genoeg; de agent doet GetSecretValue op de secret
-    resources = [
-      data.aws_secretsmanager_secret.db_pass.arn,
-      "${data.aws_secretsmanager_secret.db_pass.arn}:*"
-    ]
-  }
-}
-
-resource "aws_iam_policy" "exec_read_db_secret" {
-  name   = "ecsExecReadDbSecret-${var.project}"
-  policy = data.aws_iam_policy_document.exec_can_read_db_secret.json
-}
-
-resource "aws_iam_role_policy_attachment" "exec_read_db_secret_attach" {
-  role       = aws_iam_role.task_execution.name
-  policy_arn = aws_iam_policy.exec_read_db_secret.arn
-}
-
-# ========== LOGS ==========
+############################
+# Logs
+############################
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
   retention_in_days = 7
 }
 
-# ========== TASK DEFINITION ==========
+# Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "app"
   network_mode             = "awsvpc"
@@ -164,16 +145,18 @@ resource "aws_ecs_task_definition" "app" {
     name  = "app"
     image = "${aws_ecr_repository.api.repository_url}:latest"
 
-    portMappings = [{ containerPort = 80, protocol = "tcp" }]
+    portMappings = [{
+      containerPort = 80
+      protocol      = "tcp"
+    }]
 
-    # *** AANGEPAST: echte DB host gebruiken ***
     environment = [
-      { name = "DB_HOST", value = aws_db_instance.db.address },
-      { name = "DB_USER", value = var.db_master_username },
+      { name = "DB_HOST", value = "db.svc.internal" },
+      { name = "DB_USER", value = "appuser" },
       { name = "DB_NAME", value = "appdb" }
     ]
 
-    # Secret uit Secrets Manager
+    # Secret: komt uit data-source in main.tf (NIET hier opnieuw definiëren)
     secrets = [
       { name = "DB_PASS", valueFrom = data.aws_secretsmanager_secret_version.db_pass.arn }
     ]
@@ -189,13 +172,12 @@ resource "aws_ecs_task_definition" "app" {
   }])
 
   depends_on = [
-    aws_iam_role_policy_attachment.exec_attach,          # standaard ECS exec policy
-    aws_iam_role_policy.task_secret_read,                # task role mag (runtime) secret lezen
-    aws_iam_role_policy_attachment.exec_read_db_secret_attach  # *** NIEUW: exec role mag secret lezen ***
+    aws_iam_role_policy_attachment.exec_attach,
+    aws_iam_role_policy.task_secret_read
   ]
 }
 
-# ========== SERVICE ==========
+# ECS Service
 resource "aws_ecs_service" "app" {
   name            = "app"
   cluster         = aws_ecs_cluster.this.id
@@ -204,6 +186,7 @@ resource "aws_ecs_service" "app" {
   launch_type     = "FARGATE"
 
   network_configuration {
+    # Public subnets voor Fargate + public IP, zodat de ALB naar de tasks kan routen
     subnets          = [aws_subnet.app_public_a.id, aws_subnet.app_public_b.id]
     assign_public_ip = true
     security_groups  = [aws_security_group.app.id]
@@ -218,7 +201,7 @@ resource "aws_ecs_service" "app" {
   depends_on = [aws_lb_listener.http]
 }
 
-# ========== APP AUTOSCALING ==========
+# Service Auto Scaling
 resource "aws_appautoscaling_target" "ecs" {
   max_capacity       = 4
   min_capacity       = 2
