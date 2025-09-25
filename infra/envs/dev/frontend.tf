@@ -1,4 +1,4 @@
-# Security Groups
+# ========== SECURITY GROUPS ==========
 resource "aws_security_group" "alb" {
   name   = "alb-sg"
   vpc_id = aws_vpc.app.id
@@ -36,7 +36,8 @@ resource "aws_security_group" "app" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
-# ALB
+
+# ========== ALB ==========
 resource "aws_lb" "app" {
   name               = "case1nca-alb"
   load_balancer_type = "application"
@@ -68,11 +69,13 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.app.arn
   }
 }
-# ECS
+
+# ========== ECS ==========
 resource "aws_ecs_cluster" "this" {
   name = "case1-nca"
 }
-# Roles (exec + task can read Secrets Manager)
+
+# ========== IAM ROLES ==========
 resource "aws_iam_role" "task_execution" {
   name = "ecsTaskExecutionRole-case1nca"
   assume_role_policy = jsonencode({
@@ -93,7 +96,14 @@ resource "aws_iam_role" "task" {
     Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
-# Inline policy op de TASK role om Secrets Manager te lezen
+
+# ========== SECRETS (read) ==========
+# Lookup van je secret (naam komt uit var.db_password_secret_name, bv "case1nca/db-pass")
+data "aws_secretsmanager_secret" "db_pass" {
+  name = var.db_password_secret_name
+}
+
+# TASK role mag (runtime) secret lezen 
 data "aws_iam_policy_document" "task_secret_ro" {
   statement {
     actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
@@ -103,15 +113,44 @@ data "aws_iam_policy_document" "task_secret_ro" {
 
 resource "aws_iam_role_policy" "task_secret_read" {
   name   = "ecsTaskSecretRead-${var.project}"
-  role   = aws_iam_role.task.name       # <-- BELANGRIJK: task role, niet execution role
+  role   = aws_iam_role.task.name
   policy = data.aws_iam_policy_document.task_secret_ro.json
 }
-# Logs
+
+# *** NIEUW *** Execution role moet secret kunnen ophalen voor `container_definitions.secrets`
+data "aws_iam_policy_document" "exec_can_read_db_secret" {
+  statement {
+    sid     = "AllowReadDbPassSecret"
+    effect  = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    # het basis-ARN is genoeg; de agent doet GetSecretValue op de secret
+    resources = [
+      data.aws_secretsmanager_secret.db_pass.arn,
+      "${data.aws_secretsmanager_secret.db_pass.arn}:*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "exec_read_db_secret" {
+  name   = "ecsExecReadDbSecret-${var.project}"
+  policy = data.aws_iam_policy_document.exec_can_read_db_secret.json
+}
+
+resource "aws_iam_role_policy_attachment" "exec_read_db_secret_attach" {
+  role       = aws_iam_role.task_execution.name
+  policy_arn = aws_iam_policy.exec_read_db_secret.arn
+}
+
+# ========== LOGS ==========
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
   retention_in_days = 7
 }
-# Task Definition
+
+# ========== TASK DEFINITION ==========
 resource "aws_ecs_task_definition" "app" {
   family                   = "app"
   network_mode             = "awsvpc"
@@ -122,16 +161,19 @@ resource "aws_ecs_task_definition" "app" {
   task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
-    name         = "app"
-    image        = "${aws_ecr_repository.api.repository_url}:latest"
+    name  = "app"
+    image = "${aws_ecr_repository.api.repository_url}:latest"
+
     portMappings = [{ containerPort = 80, protocol = "tcp" }]
 
+    # *** AANGEPAST: echte DB host gebruiken ***
     environment = [
-      { name = "DB_HOST", value = "db.svc.internal" },
-      { name = "DB_USER", value = "appuser" },
+      { name = "DB_HOST", value = aws_db_instance.db.address },
+      { name = "DB_USER", value = var.db_master_username },
       { name = "DB_NAME", value = "appdb" }
     ]
 
+    # Secret uit Secrets Manager
     secrets = [
       { name = "DB_PASS", valueFrom = data.aws_secretsmanager_secret_version.db_pass.arn }
     ]
@@ -146,14 +188,14 @@ resource "aws_ecs_task_definition" "app" {
     }
   }])
 
-depends_on = [
-  aws_iam_role_policy_attachment.exec_attach, 
-  aws_iam_role_policy.task_secret_read        
-]
-
-
+  depends_on = [
+    aws_iam_role_policy_attachment.exec_attach,          # standaard ECS exec policy
+    aws_iam_role_policy.task_secret_read,                # task role mag (runtime) secret lezen
+    aws_iam_role_policy_attachment.exec_read_db_secret_attach  # *** NIEUW: exec role mag secret lezen ***
+  ]
 }
-# Service
+
+# ========== SERVICE ==========
 resource "aws_ecs_service" "app" {
   name            = "app"
   cluster         = aws_ecs_cluster.this.id
@@ -172,10 +214,11 @@ resource "aws_ecs_service" "app" {
     container_name   = "app"
     container_port   = 80
   }
-  #service waits for the ALB listener
+
   depends_on = [aws_lb_listener.http]
 }
-#ECS Service Auto Scaling 
+
+# ========== APP AUTOSCALING ==========
 resource "aws_appautoscaling_target" "ecs" {
   max_capacity       = 4
   min_capacity       = 2
@@ -192,7 +235,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
   service_namespace  = aws_appautoscaling_target.ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
-    target_value = 50 # richt op ~50% CPU
+    target_value = 50
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
