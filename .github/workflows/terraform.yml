@@ -23,16 +23,23 @@ jobs:
     runs-on: [self-hosted, mac]
     steps:
       - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
-        with: { role-to-assume: ${{ secrets.AWS_ROLE_ARN }}, aws-region: ${{ env.AWS_REGION }} }
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - uses: hashicorp/setup-terraform@v3
-        with: { terraform_wrapper: false }
+        with:
+          terraform_wrapper: false
 
       - run: terraform -chdir=infra/envs/dev init -reconfigure -backend-config=backend.hcl
       - run: terraform -chdir=infra/envs/dev validate -no-color
+
       - name: Plan (PR)
         if: github.event_name == 'pull_request'
         run: terraform -chdir=infra/envs/dev plan -input=false -no-color -out=tfplan
+
       - name: Apply (main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: terraform -chdir=infra/envs/dev apply -input=false -auto-approve
