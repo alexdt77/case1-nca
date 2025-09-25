@@ -1,22 +1,15 @@
 name: Terraform
 
 on:
-  workflow_dispatch:
-    inputs:
-      target:
-        description: "Runner"
-        required: true
-        default: mac
-        type: choice
-        options: [mac]
   push:
     branches: ["main"]
     paths: ["infra/**", ".github/workflows/terraform.yml"]
   pull_request:
     paths: ["infra/**", ".github/workflows/terraform.yml"]
+  workflow_dispatch: {}
 
 permissions:
-  id-token: write     # nodig voor OIDC
+  id-token: write
   contents: read
 
 concurrency:
@@ -25,7 +18,6 @@ concurrency:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
   TF_IN_AUTOMATION: true
 
 jobs:
@@ -37,6 +29,15 @@ jobs:
       run:
         shell: bash
         working-directory: infra/envs/dev
+    env:
+      # Gebruik overal TF_VAR_ → geen -var vlaggen meer nodig
+      TF_VAR_db_master_username: appadmin
+      TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+      TF_VAR_db_password_secret_name: ${{ secrets.TF_VAR_DB_PASSWORD_SECRET_NAME }}
+      TF_VAR_vpc_id:     ${{ vars.VPC_ID }}
+      TF_VAR_subnet_id:  ${{ vars.SUBNET_ID }}
+      TF_VAR_my_ip_cidr: ${{ vars.MY_IP_CIDR }}
+      TF_VAR_env:        ${{ vars.ENV }}
 
     steps:
       - uses: actions/checkout@v4
@@ -47,20 +48,17 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region:     ${{ env.AWS_REGION }}
 
-      - name: Sanity check AWS identity/region
-        run: |
-          echo "AWS_REGION=$AWS_REGION"
-          echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
-          aws sts get-caller-identity
+      - name: Who am I
+        run: aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Fmt
+      - name: Terraform fmt (non-blocking)
         run: terraform fmt -recursive -check || true
 
-      - name: Terraform Init (S3 backend)
+      - name: Terraform init (S3 backend)
         run: |
           terraform init -reconfigure \
             -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
@@ -68,22 +66,11 @@ jobs:
             -backend-config="region=${{ secrets.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_BACKEND_DYNAMODB_TABLE }}"
 
-      - name: Terraform Validate
+      - name: Terraform validate
         run: terraform validate -no-color
 
-      - name: Terraform Apply
-        env:
-          TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
-          TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
-          TF_VAR_db_password_secret_name: ${{ secrets.TF_VAR_DB_PASSWORD_SECRET_NAME }}
-        run: >
-          terraform apply -input=false -auto-approve -lock-timeout=5m
-          -var "vpc_id=${{ vars.VPC_ID }}"
-          -var "subnet_id=${{ vars.SUBNET_ID }}"
-          -var "my_ip_cidr=${{ vars.MY_IP_CIDR }}"
-          -var "env=${{ vars.ENV }}"
-          -var "db_master_username=appadmin"
-
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve -lock-timeout=5m
 
   plan-pr:
     name: Plan (PR)
@@ -93,6 +80,14 @@ jobs:
       run:
         shell: bash
         working-directory: infra/envs/dev
+    env:
+      TF_VAR_db_master_username: appadmin
+      TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+      TF_VAR_db_password_secret_name: ${{ secrets.TF_VAR_DB_PASSWORD_SECRET_NAME }}
+      TF_VAR_vpc_id:     ${{ vars.VPC_ID }}
+      TF_VAR_subnet_id:  ${{ vars.SUBNET_ID }}
+      TF_VAR_my_ip_cidr: ${{ vars.MY_IP_CIDR }}
+      TF_VAR_env:        ${{ vars.ENV }}
 
     steps:
       - uses: actions/checkout@v4
@@ -103,20 +98,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region:     ${{ env.AWS_REGION }}
 
-      - name: Sanity check AWS identity/region
-        run: |
-          echo "AWS_REGION=$AWS_REGION"
-          echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
-          aws sts get-caller-identity
-
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Terraform Fmt
+      - name: Terraform fmt (non-blocking)
         run: terraform fmt -recursive -check || true
 
-      - name: Terraform Init (S3 backend)
+      - name: Terraform init (S3 backend)
         run: |
           terraform init -reconfigure \
             -backend-config="bucket=${{ secrets.TF_BACKEND_BUCKET }}" \
@@ -124,18 +113,8 @@ jobs:
             -backend-config="region=${{ secrets.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ secrets.TF_BACKEND_DYNAMODB_TABLE }}"
 
-      - name: Terraform Validate
+      - name: Terraform validate
         run: terraform validate -no-color
 
-      - name: Terraform Plan
-        env:
-          TF_VAR_db_master_username: ${{ secrets.DB_MASTER_USERNAME }}
-          TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
-          TF_VAR_db_password_secret_name: ${{ secrets.TF_VAR_DB_PASSWORD_SECRET_NAME }}
-        run: >
-          terraform plan -input=false -no-color -out=tfplan -lock-timeout=5m
-          -var "vpc_id=${{ vars.VPC_ID }}"
-          -var "subnet_id=${{ vars.SUBNET_ID }}"
-          -var "my_ip_cidr=${{ vars.MY_IP_CIDR }}"
-          -var "env=${{ vars.ENV }}"
-          -var "db_master_username=appadmin"
+      - name: Terraform plan
+        run: terraform plan -input=false -no-color -out=tfplan -lock-timeout=5m
