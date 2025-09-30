@@ -123,9 +123,7 @@ resource "aws_iam_role_policy" "task_secret_read" {
   policy = data.aws_iam_policy_document.task_secret_ro.json
 }
 
-############################
 # Logs
-############################
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/app"
   retention_in_days = 7
